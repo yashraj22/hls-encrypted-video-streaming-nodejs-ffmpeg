@@ -20,3 +20,6 @@ Thumbs.db
 /node_modules/
 /temp-uploads/*
 /public/videos/*
+
+!/temp-uploads/.gitkeep
+!/public/videos/.gitkeep
