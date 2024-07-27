@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:,">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Video List</title>
+  <style>
+    .no-scroll {
+      overflow: hidden;
+    }
+
+    .z-indx {
+      z-index: 40;
+    }
+
+    .modal-content {
+      width: 70%;
+      height: 70%;
+    }
+
+    .loader {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 2s linear infinite;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container mx-auto w-full h-full">
+    <div class="container mx-auto w-full h-full">
+      <div class="flex flex-col items-center gap-4 py-4">
+        <div class="p-2">
+          <input type="text" id="title" name="title" placeholder="Enter title"
+            class="w-72 h-10 border border-gray-500 rounded p-1">
+        </div>
+        <div class="p-2">
+          <input type="file" id="videoUpload" name="video" accept="video/*">
+        </div>
+        <div class="p-2">
+          <button onclick="uploadVideo()" class="bg-blue-500 text-white w-72 px-4 py-2 font-semibold rounded">Upload
+            Video</button>
+        </div>
+      </div>
+      <div id="message"></div>
+
+      <div id="videoList" class="flex flex-col items-center gap-4"></div>
+
+      <div id="modal" class="z-indx fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+        <div class="bg-white p-4 modal-content rounded">
+          <video id="video" controls class="w-full h-[90%]"></video>
+          <button onclick="closeModal()"
+            class="mt-2 bg-red-500 text-white px-4 py-2 font-semibold rounded">Close</button>
+        </div>
+      </div>
+
+      <div id="loader" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+        <div class="loader"></div>
+      </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
