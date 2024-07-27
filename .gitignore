@@ -17,6 +17,6 @@ Thumbs.db
 # Local env files
 .env
 
-node_modules/
-temp-uploads/*
-public/videos/*
+/node_modules/
+/temp-uploads/*
+/public/videos/*
