@@ -1,23 +1,26 @@
-const ffmpeg = require('fluent-ffmpeg');
-const ffprobePath = require('ffprobe-static').path; // ffmpeg binary
-const ffmpegPath = require('ffmpeg-static'); // ffmpeg binary
-const fs = require('fs-extra');
-const { updateJsonData } = require('./updateJsonData');
+import ffmpeg from 'fluent-ffmpeg';
+import { path as ffprobePath } from 'ffprobe-static';
+import ffmpegPath from 'ffmpeg-static';
+import fs from 'fs-extra';
+import { Response } from 'express';
+import { updateJsonData } from './updateJsonData.js';
 
-ffmpeg.setFfmpegPath(ffmpegPath);
+if (ffmpegPath) {
+  ffmpeg.setFfmpegPath(ffmpegPath);
+}
 ffmpeg.setFfprobePath(ffprobePath);
 
-async function generateThumbnail(filePath, outputDir) {
+export async function generateThumbnail(filePath: string, outputDir: string): Promise<void> {
   return new Promise((resolve, reject) => {
     ffmpeg(filePath)
-      .on('filenames', function (filenames) {
+      .on('filenames', function (filenames: string[]) {
         console.log('Generating thumbnail:', filenames);
       })
       .on('end', function () {
         console.log('Thumbnail generation completed.');
         resolve();
       })
-      .on('error', function (err) {
+      .on('error', function (err: Error) {
         console.error('Error generating thumbnail:', err);
         reject(err);
       })
@@ -30,11 +33,11 @@ async function generateThumbnail(filePath, outputDir) {
   });
 }
 
-async function generateVideoSegments(filePath, outputDir, title, res) {
+export async function generateVideoSegments(filePath: string, outputDir: string, title: string, res: Response): Promise<void> {
   return new Promise((resolve, reject) => {
     ffmpeg(filePath)
-      .on('filenames', function (title) {
-        console.log('Generating Video Segments:', title);
+      .on('filenames', function (filenames: string[]) {
+        console.log('Generating Video Segments:', filenames);
       })
       .outputOptions([
         '-c:v libx264', // Specifies the H.264 video codec.
@@ -61,7 +64,7 @@ async function generateVideoSegments(filePath, outputDir, title, res) {
         res.json({ message: 'Video uploaded and converted successfully.' });
         resolve();
       })
-      .on('error', (err) => {
+      .on('error', (err: Error) => {
         console.error('FFmpeg error:', err);
         res.status(500).json({ message: 'Error converting video.' });
         reject(err);
@@ -69,5 +72,3 @@ async function generateVideoSegments(filePath, outputDir, title, res) {
       .run();
   });
 }
-
-module.exports = { generateThumbnail, generateVideoSegments };
