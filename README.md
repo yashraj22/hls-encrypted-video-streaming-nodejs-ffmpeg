@@ -343,3 +343,17 @@ For support, please create an issue in the GitHub repository or contact the deve
 ---
 
 Built with ❤️ for secure online learning.
+
+## Seeding the Database
+
+To seed the database with sample users, courses, lessons, and enrollments, run:
+
+```
+npm run seed
+```
+
+This will clear existing data and insert new sample data for testing.
+
+## Frontend
+
+A basic frontend will be provided in the `frontend/` directory. See its README for setup and usage instructions.
