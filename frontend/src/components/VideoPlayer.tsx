@@ -1,40 +1,71 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Box, Typography, Button } from '@mui/material';
-import Hls from 'hls.js';
-import axios from 'axios';
+import React, { useEffect, useRef, useState } from "react";
+import { Box, Typography } from "@mui/material";
+import Hls from "hls.js";
 
-// TODO: Fetch the actual lessonId from backend for real use. For demo, set manually after seeding.
-const LESSON_ID = 'seedkeyid'; // Use the seeded lesson's keyId or _id
+// Use the correct lesson _id from the backend
+const LESSON_ID = "68775ee4f8422246a682efb6";
 
 const VideoPlayer: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [error, setError] = useState('');
-  const [token, setToken] = useState('');
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    // Get video access token
-    axios.post(`/api/video/token/${LESSON_ID}`, {}, { withCredentials: true })
-      .then(res => setToken(res.data.token))
-      .catch(err => setError('Failed to get video token: ' + (err.response?.data?.message || err.message)));
-  }, []);
+    if (!videoRef.current) return;
+    const playlistUrl = `/api/video/stream/${LESSON_ID}`;
+    let hls: Hls | null = null;
+    const video = videoRef.current;
 
-  useEffect(() => {
-    if (!token || !videoRef.current) return;
-    const playlistUrl = `/api/video/stream/${LESSON_ID}?token=${token}`;
+    const onVideoError = (e: Event) => {
+      const target = e.target as HTMLVideoElement;
+      const errorObj = target.error;
+      if (errorObj) {
+        console.error("Video element error:", errorObj);
+        setError(
+          `Video element error: code ${errorObj.code} - ${
+            errorObj.message || "No message"
+          }`
+        );
+      } else {
+        console.error("Unknown video element error", e);
+        setError("Unknown video element error");
+      }
+    };
+
+    video.addEventListener("error", onVideoError);
+
     if (Hls.isSupported()) {
-      const hls = new Hls();
+      hls = new Hls();
       hls.loadSource(playlistUrl);
-      hls.attachMedia(videoRef.current);
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        setError('Video playback error: ' + data.details);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.ERROR, (event: string, data: any) => {
+        console.error("Hls.js ERROR event:", { event, ...data });
+        setError(
+          `Hls.js error: ${data.type} - ${data.details} (fatal: ${data.fatal})`
+        );
+      });
+      hls.on(Hls.Events.MANIFEST_PARSED, (event: string, data: any) => {
+        console.log("Hls.js MANIFEST_PARSED:", data);
+      });
+      hls.on(Hls.Events.LEVEL_LOADED, (event: string, data: any) => {
+        console.log("Hls.js LEVEL_LOADED:", data);
+      });
+      hls.on(Hls.Events.FRAG_LOADED, (event: string, data: any) => {
+        console.log("Hls.js FRAG_LOADED:", data);
+      });
+      hls.on(Hls.Events.FRAG_DECRYPTED, (event: string, data: any) => {
+        console.log("Hls.js FRAG_DECRYPTED:", data);
       });
       return () => {
-        hls.destroy();
+        hls?.destroy();
+        video.removeEventListener("error", onVideoError);
       };
-    } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-      videoRef.current.src = playlistUrl;
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = playlistUrl;
     }
-  }, [token]);
+    return () => {
+      video.removeEventListener("error", onVideoError);
+    };
+  }, []);
 
   return (
     <Box>

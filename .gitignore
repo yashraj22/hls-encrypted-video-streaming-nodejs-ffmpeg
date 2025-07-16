@@ -1,25 +1,29 @@
-# IDE - VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-.history/*
+# Node dependencies
+node_modules/
+frontend/node_modules/
 
-# misc
-npm-debug.log
-testem.log
+# Build output
+*.log
+dist/
+build/
 
-# System Files
+# Local environment
+.env
+.env.*
+
+# Video storage and temp files
+storage/
+keys/
+temp-uploads/
+
+# OS files
 .DS_Store
 Thumbs.db
 
-# Local env files
-.env
+# Docker
+*.pid
 
-/node_modules/
-/temp-uploads/*
-/public/videos/*
-
-!/temp-uploads/.gitkeep
-!/public/videos/.gitkeep
+# IDE/editor
+.vscode/
+.idea/
+*.swp

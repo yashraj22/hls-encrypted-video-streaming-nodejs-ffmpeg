@@ -1,11 +1,11 @@
-import ffmpeg from 'fluent-ffmpeg';
-import { path as ffprobePath } from 'ffprobe-static';
-import ffmpegPath from 'ffmpeg-static';
-import fs from 'fs-extra';
-import path from 'path';
-import crypto from 'crypto';
-import { fileURLToPath } from 'url';
-import { v4 as uuidv4 } from 'uuid';
+import ffmpeg from "fluent-ffmpeg";
+import { path as ffprobePath } from "ffprobe-static";
+import ffmpegPath from "ffmpeg-static";
+import fs from "fs-extra";
+import path from "path";
+import crypto from "crypto";
+import { fileURLToPath } from "url";
+import { v4 as uuidv4 } from "uuid";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,23 +24,23 @@ export interface ProcessingResult {
 }
 
 export class VideoProcessingService {
-  private static readonly STORAGE_PATH = path.join(__dirname, '../../storage');
-  private static readonly KEYS_PATH = path.join(__dirname, '../../keys');
-  
+  private static readonly STORAGE_PATH = path.join(__dirname, "../../storage");
+  private static readonly KEYS_PATH = path.join(__dirname, "../../keys");
+
   static async initialize(): Promise<void> {
     await fs.ensureDir(this.STORAGE_PATH);
     await fs.ensureDir(this.KEYS_PATH);
   }
 
-  static generateEncryptionKey(): { key: string; keyId: string } {
-    const key = crypto.randomBytes(16).toString('hex');
+  static generateEncryptionKey(): { key: Buffer; keyId: string } {
+    const key = crypto.randomBytes(16); // Buffer, not hex string
     const keyId = uuidv4();
     return { key, keyId };
   }
 
-  static async saveEncryptionKey(keyId: string, key: string): Promise<string> {
+  static async saveEncryptionKey(keyId: string, key: Buffer): Promise<string> {
     const keyFilePath = path.join(this.KEYS_PATH, `${keyId}.key`);
-    await fs.writeFile(keyFilePath, key);
+    await fs.writeFile(keyFilePath, key); // Write raw binary
     return keyFilePath;
   }
 
@@ -49,7 +49,7 @@ export class VideoProcessingService {
     lessonId: string,
     title: string
   ): Promise<ProcessingResult> {
-    const outputDir = path.join(this.STORAGE_PATH, 'videos', lessonId);
+    const outputDir = path.join(this.STORAGE_PATH, "videos", lessonId);
     await fs.ensureDir(outputDir);
 
     // Generate encryption key
@@ -57,9 +57,18 @@ export class VideoProcessingService {
     const keyFilePath = await this.saveEncryptionKey(keyId, key);
 
     // Create key info file for HLS encryption
-    const keyInfoPath = path.join(outputDir, 'key.info');
+    const keyInfoPath = path.join(outputDir, "key.info");
     const keyUri = `/api/video/key/${keyId}`;
-    await fs.writeFile(keyInfoPath, `${keyUri}\n${keyFilePath}\n${key}`);
+    // Write key info file: only two lines, no key bytes appended
+    await fs.writeFile(keyInfoPath, `${keyUri}\n${keyFilePath}\n`, "utf8");
+    // Debug logging
+    console.log("Key info file written:", keyInfoPath);
+    console.log("Key URI:", keyUri);
+    console.log("Key file path:", keyFilePath);
+    console.log("Key (hex):", key.toString("hex"));
+    const keyInfoDebug = await fs.readFile(keyInfoPath);
+    console.log("Key info file (hex):", keyInfoDebug.toString("hex"));
+    console.log("Key info file (utf8):", keyInfoDebug.toString("utf8"));
 
     try {
       // Get video duration
@@ -80,7 +89,7 @@ export class VideoProcessingService {
         thumbnailUrl: `/storage/videos/${lessonId}/thumbnail.webp`,
         duration,
         keyId,
-        encryptionKey: key
+        encryptionKey: key.toString("hex"),
       };
     } catch (error) {
       // Clean up on error
@@ -105,19 +114,19 @@ export class VideoProcessingService {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       ffmpeg(filePath)
-        .on('end', () => {
+        .on("end", () => {
           console.log(`Thumbnail generated for: ${title}`);
           resolve();
         })
-        .on('error', (err) => {
-          console.error('Error generating thumbnail:', err);
+        .on("error", (err) => {
+          console.error("Error generating thumbnail:", err);
           reject(err);
         })
         .screenshots({
           count: 1,
           folder: outputDir,
-          filename: 'thumbnail.webp',
-          size: '640x360'
+          filename: "thumbnail.webp",
+          size: "640x360",
         });
     });
   }
@@ -131,63 +140,43 @@ export class VideoProcessingService {
       ffmpeg(filePath)
         .outputOptions([
           // Video encoding settings
-          '-c:v libx264',
-          '-c:a aac',
-          '-preset medium',
-          '-crf 23',
-          '-profile:v baseline',
-          '-level 3.0',
-          
+          "-c:v libx264",
+          "-c:a aac",
+          "-preset medium",
+          "-crf 23",
+          "-profile:v baseline",
+          "-level 3.0",
           // HLS settings
-          '-f hls',
-          '-hls_time 6',
-          '-hls_list_size 0',
-          '-hls_playlist_type vod',
-          
-          // Encryption settings
-          `-hls_key_info_file ${keyInfoPath}`,
-          '-hls_segment_filename',
+          "-f hls",
+          "-hls_time 6",
+          "-hls_list_size 0",
+          "-hls_playlist_type vod",
+          // Encryption settings (DISABLED FOR DEBUGGING)
+          // `-hls_key_info_file ${keyInfoPath}`,
+          "-hls_segment_filename",
           `${outputDir}/segment_%03d.ts`,
-          
-          // Multiple quality settings for adaptive streaming
-          '-map 0:v:0',
-          '-map 0:a:0',
-          '-b:v:0 2000k',
-          '-maxrate:v:0 2000k',
-          '-bufsize:v:0 4000k',
-          '-s:v:0 1280x720',
-          
-          // Add a lower quality stream
-          '-map 0:v:0',
-          '-map 0:a:0',
-          '-b:v:1 800k',
-          '-maxrate:v:1 800k',
-          '-bufsize:v:1 1600k',
-          '-s:v:1 854x480',
-          
-          // Master playlist
-          '-var_stream_map', 'v:0,a:0 v:1,a:1',
-          '-master_pl_name', 'index.m3u8',
-          '-hls_segment_type', 'mpegts'
         ])
-        .output(`${outputDir}/stream_%v.m3u8`)
-        .on('end', () => {
-          console.log('HLS generation completed with encryption');
+        .output(`${outputDir}/index.m3u8`)
+        .on("end", () => {
+          console.log("HLS generation completed with encryption");
           resolve();
         })
-        .on('error', (err) => {
-          console.error('FFmpeg error:', err);
+        .on("error", (err) => {
+          console.error("FFmpeg error:", err);
           reject(err);
         })
-        .on('progress', (progress) => {
+        .on("progress", (progress) => {
           console.log(`Processing: ${Math.round(progress.percent || 0)}%`);
+        })
+        .on("stderr", (line) => {
+          console.error("FFmpeg stderr:", line);
         })
         .run();
     });
   }
 
   static async deleteVideo(lessonId: string): Promise<void> {
-    const videoDir = path.join(this.STORAGE_PATH, 'videos', lessonId);
+    const videoDir = path.join(this.STORAGE_PATH, "videos", lessonId);
     await fs.remove(videoDir);
   }
 

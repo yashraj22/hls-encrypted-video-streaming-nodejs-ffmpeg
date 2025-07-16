@@ -6,6 +6,7 @@ import Lesson from "../models/Lesson.ts";
 import Course from "../models/Course.ts";
 import VideoProcessingService from "../services/VideoProcessingService.ts";
 import { fileURLToPath } from "url";
+import Mongoose from "mongoose";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,23 +39,22 @@ export class LessonController {
   static async createLesson(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { title, description, courseId, order, isFree } = req.body;
-      const userId = req.user?.id;
+      // const userId = req.user?.id;
 
-      if (!userId) {
-        res.status(401).json({ message: "Authentication required" });
-        return;
-      }
+      // Remove authentication and instructor check
+      // if (!userId) {
+      //   res.status(401).json({ message: "Authentication required" });
+      //   return;
+      // }
 
-      // Check if user owns the course
-      const course = await Course.findOne({
-        _id: courseId,
-        instructor: userId,
-      });
-
-      if (!course) {
-        res.status(404).json({ message: "Course not found or access denied" });
-        return;
-      }
+      // const course = await Course.findOne({
+      //   _id: courseId,
+      //   instructor: userId,
+      // });
+      // if (!course) {
+      //   res.status(404).json({ message: "Course not found or access denied" });
+      //   return;
+      // }
 
       // Create lesson without video initially
       const lesson = new Lesson({
@@ -102,39 +102,51 @@ export class LessonController {
     uploadSingle(req, res, async (err) => {
       if (err) {
         console.error("Upload error:", err);
-        res.status(400).json({ message: err.message });
+        if (!res.headersSent) {
+          res.status(400).json({ message: err.message || "Upload error" });
+        }
         return;
       }
 
       try {
         const { lessonId } = req.params;
-        const userId = req.user?.id;
+        console.log("Uploading video for lesson:", lessonId);
+        // const userId = req.user?.id;
 
-        if (!userId) {
-          res.status(401).json({ message: "Authentication required" });
-          return;
-        }
+        // Remove authentication and instructor check
+        // if (!userId) {
+        //   if (!res.headersSent) res.status(401).json({ message: "Authentication required" });
+        //   return;
+        // }
 
         if (!req.file) {
-          res.status(400).json({ message: "No video file uploaded" });
+          if (!res.headersSent)
+            res.status(400).json({ message: "No video file uploaded" });
           return;
         }
 
-        // Check if user owns the lesson
-        const lesson = await Lesson.findById(lessonId).populate("course");
+        // Remove instructor check
+        // const lesson = await Lesson.findById(lessonId).populate("course");
+        // if (!lesson) {
+        //   if (!res.headersSent) res.status(404).json({ message: "Lesson not found" });
+        //   return;
+        // }
+        // const course = await Course.findOne({
+        //   _id: lesson.course,
+        //   instructor: userId,
+        // });
+        // if (!course) {
+        //   if (!res.headersSent) res.status(403).json({ message: "Access denied" });
+        //   return;
+        // }
 
+        // Just check lesson exists
+        const lesson = await Lesson.findById(
+          new Mongoose.Types.ObjectId(lessonId)
+        );
         if (!lesson) {
-          res.status(404).json({ message: "Lesson not found" });
-          return;
-        }
-
-        const course = await Course.findOne({
-          _id: lesson.course,
-          instructor: userId,
-        });
-
-        if (!course) {
-          res.status(403).json({ message: "Access denied" });
+          if (!res.headersSent)
+            res.status(404).json({ message: "Lesson not found" });
           return;
         }
 
@@ -154,17 +166,23 @@ export class LessonController {
           keyId: processingResult.keyId,
         });
 
-        res.json({
-          message: "Video uploaded and processed successfully",
-          video: {
-            url: processingResult.videoUrl,
-            thumbnail: processingResult.thumbnailUrl,
-            duration: processingResult.duration,
-          },
-        });
-      } catch (error) {
+        if (!res.headersSent) {
+          res.json({
+            message: "Video uploaded and processed successfully",
+            video: {
+              url: processingResult.videoUrl,
+              thumbnail: processingResult.thumbnailUrl,
+              duration: processingResult.duration,
+            },
+          });
+        }
+      } catch (error: any) {
         console.error("Error uploading video:", error);
-        res.status(500).json({ message: "Video processing failed" });
+        if (!res.headersSent) {
+          res
+            .status(500)
+            .json({ message: error.message || "Video processing failed" });
+        }
       }
     });
   }
@@ -173,12 +191,13 @@ export class LessonController {
   static async getLesson(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { lessonId } = req.params;
-      const userId = req.user?.id;
+      // const userId = req.user?.id;
 
-      if (!userId) {
-        res.status(401).json({ message: "Authentication required" });
-        return;
-      }
+      // Remove authentication check
+      // if (!userId) {
+      //   res.status(401).json({ message: "Authentication required" });
+      //   return;
+      // }
 
       const lesson = await Lesson.findById(lessonId)
         .populate("course", "title instructor")
@@ -215,30 +234,26 @@ export class LessonController {
     try {
       const { lessonId } = req.params;
       const { title, description, order, isFree, isPublished } = req.body;
-      const userId = req.user?.id;
+      // const userId = req.user?.id;
 
-      if (!userId) {
-        res.status(401).json({ message: "Authentication required" });
-        return;
-      }
-
-      // Check if user owns the lesson
-      const lesson = await Lesson.findById(lessonId).populate("course");
-
-      if (!lesson) {
-        res.status(404).json({ message: "Lesson not found" });
-        return;
-      }
-
-      const course = await Course.findOne({
-        _id: lesson.course,
-        instructor: userId,
-      });
-
-      if (!course) {
-        res.status(403).json({ message: "Access denied" });
-        return;
-      }
+      // Remove authentication and instructor check
+      // if (!userId) {
+      //   res.status(401).json({ message: "Authentication required" });
+      //   return;
+      // }
+      // const lesson = await Lesson.findById(lessonId).populate("course");
+      // if (!lesson) {
+      //   res.status(404).json({ message: "Lesson not found" });
+      //   return;
+      // }
+      // const course = await Course.findOne({
+      //   _id: lesson.course,
+      //   instructor: userId,
+      // });
+      // if (!course) {
+      //   res.status(403).json({ message: "Access denied" });
+      //   return;
+      // }
 
       // Update lesson
       const updatedLesson = await Lesson.findByIdAndUpdate(
@@ -267,40 +282,39 @@ export class LessonController {
   static async deleteLesson(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { lessonId } = req.params;
-      const userId = req.user?.id;
+      // const userId = req.user?.id;
 
-      if (!userId) {
-        res.status(401).json({ message: "Authentication required" });
-        return;
-      }
+      // Remove authentication and instructor check
+      // if (!userId) {
+      //   res.status(401).json({ message: "Authentication required" });
+      //   return;
+      // }
+      // const lesson = await Lesson.findById(lessonId).populate("course");
+      // if (!lesson) {
+      //   res.status(404).json({ message: "Lesson not found" });
+      //   return;
+      // }
+      // const course = await Course.findOne({
+      //   _id: lesson.course,
+      //   instructor: userId,
+      // });
+      // if (!course) {
+      //   res.status(403).json({ message: "Access denied" });
+      //   return;
+      // }
 
-      // Check if user owns the lesson
-      const lesson = await Lesson.findById(lessonId).populate("course");
-
-      if (!lesson) {
-        res.status(404).json({ message: "Lesson not found" });
-        return;
-      }
-
-      const course = await Course.findOne({
-        _id: lesson.course,
-        instructor: userId,
-      });
-
-      if (!course) {
-        res.status(403).json({ message: "Access denied" });
-        return;
-      }
-
-      // Delete video files
-      if (lesson.videoUrl) {
+      // Delete video files if present
+      const lesson = await Lesson.findById(lessonId);
+      if (lesson && lesson.videoUrl) {
         await VideoProcessingService.deleteVideo(lessonId as string);
       }
 
       // Remove lesson from course
-      await Course.findByIdAndUpdate(lesson.course, {
-        $pull: { lessons: lessonId },
-      });
+      if (lesson) {
+        await Course.findByIdAndUpdate(lesson.course, {
+          $pull: { lessons: lessonId },
+        });
+      }
 
       // Delete lesson
       await Lesson.findByIdAndDelete(lessonId);
@@ -319,12 +333,13 @@ export class LessonController {
   ): Promise<void> {
     try {
       const { courseId } = req.params;
-      const userId = req.user?.id;
+      // const userId = req.user?.id;
 
-      if (!userId) {
-        res.status(401).json({ message: "Authentication required" });
-        return;
-      }
+      // Remove authentication check
+      // if (!userId) {
+      //   res.status(401).json({ message: "Authentication required" });
+      //   return;
+      // }
 
       const lessons = await Lesson.find({ course: courseId })
         .sort({ order: 1 })

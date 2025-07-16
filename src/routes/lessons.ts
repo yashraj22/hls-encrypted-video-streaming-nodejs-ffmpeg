@@ -1,23 +1,23 @@
 import { Router } from "express";
 import { LessonController } from "../controllers/LessonController.ts";
-import { authenticate, authorize } from "../middleware/auth.ts";
+// import { authenticate, authorize } from "../middleware/auth.ts";
 
 const router = Router();
 
-// All lesson routes require authentication
-router.use(authenticate);
+// All lesson routes are now public
+// router.use(authenticate);
 
 // Create a new lesson (instructors only)
 router.post(
   "/",
-  authorize(["instructor", "admin"]),
+  // authorize(["instructor", "admin"]),
   LessonController.createLesson
 );
 
 // Upload video for a lesson (instructors only)
 router.post(
   "/:lessonId/video",
-  authorize(["instructor", "admin"]),
+  // authorize(["instructor", "admin"]),
   LessonController.uploadVideo
 );
 
@@ -27,14 +27,14 @@ router.get("/:lessonId", LessonController.getLesson);
 // Update lesson (instructors only)
 router.put(
   "/:lessonId",
-  authorize(["instructor", "admin"]),
+  // authorize(["instructor", "admin"]),
   LessonController.updateLesson
 );
 
 // Delete lesson (instructors only)
 router.delete(
   "/:lessonId",
-  authorize(["instructor", "admin"]),
+  // authorize(["instructor", "admin"]),
   LessonController.deleteLesson
 );
 

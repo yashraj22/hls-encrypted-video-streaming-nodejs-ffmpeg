@@ -15,39 +15,39 @@ export class VideoController {
   ): Promise<void> {
     try {
       const { keyId } = req.params;
-      const userId = req.user?.id;
+      // const userId = req.user?.id;
 
-      if (!userId) {
-        res.status(401).json({ message: "Authentication required" });
-        return;
-      }
+      // Remove authentication and enrollment check
+      // if (!userId) {
+      //   res.status(401).json({ message: "Authentication required" });
+      //   return;
+      // }
 
       // Find the lesson associated with this key
-      const lesson = await Lesson.findOne({ keyId }).populate("course");
+      const lesson = await Lesson.findOne({ keyId });
 
       if (!lesson) {
         res.status(404).json({ message: "Video not found" });
         return;
       }
 
-      // Check if user has access to this lesson
-      const enrollment = await Enrollment.findOne({
-        student: userId,
-        course: lesson.course,
-        isActive: true,
-      });
+      // Remove enrollment check
+      // const enrollment = await Enrollment.findOne({
+      //   student: userId,
+      //   course: lesson.course,
+      //   isActive: true,
+      // });
+      // if (!enrollment) {
+      //   res.status(403).json({ message: "Access denied" });
+      //   return;
+      // }
 
-      if (!enrollment) {
-        res.status(403).json({ message: "Access denied" });
-        return;
-      }
-
-      // Generate time-limited access token
-      const accessToken = jwt.sign(
-        { userId, lessonId: lesson._id, keyId },
-        process.env["JWT_SECRET"] || "your-secret-key",
-        { expiresIn: "1h" }
-      );
+      // Generate time-limited access token (optional, can skip)
+      // const accessToken = jwt.sign(
+      //   { userId, lessonId: lesson._id, keyId },
+      //   process.env["JWT_SECRET"] || "your-secret-key",
+      //   { expiresIn: "1h" }
+      // );
 
       // Set security headers
       res.set({
@@ -68,19 +68,22 @@ export class VideoController {
     }
   }
 
-  // Serve video playlist with access control
+  // Serve video playlist (public)
+  // NOTE: The playlist should reference segment URLs under /storage/videos/<lessonId>/segment_XXX.ts
+  //       so that the HLS player fetches segments directly from static files, not via API routes.
   static async getVideoPlaylist(
     req: AuthRequest,
     res: Response
   ): Promise<void> {
     try {
       const { lessonId } = req.params;
-      const userId = req.user?.id;
+      // const userId = req.user?.id;
 
-      if (!userId) {
-        res.status(401).json({ message: "Authentication required" });
-        return;
-      }
+      // Remove authentication and enrollment check
+      // if (!userId) {
+      //   res.status(401).json({ message: "Authentication required" });
+      //   return;
+      // }
 
       const lesson = await Lesson.findById(lessonId).populate("course");
 
@@ -89,23 +92,22 @@ export class VideoController {
         return;
       }
 
-      // Check access
-      const enrollment = await Enrollment.findOne({
-        student: userId,
-        course: lesson.course,
-        isActive: true,
-      });
-
-      if (!enrollment) {
-        res.status(403).json({ message: "Access denied" });
-        return;
-      }
+      // Remove enrollment check
+      // const enrollment = await Enrollment.findOne({
+      //   student: userId,
+      //   course: lesson.course,
+      //   isActive: true,
+      // });
+      // if (!enrollment) {
+      //   res.status(403).json({ message: "Access denied" });
+      //   return;
+      // }
 
       // Update last accessed
-      await Enrollment.findByIdAndUpdate(enrollment._id, {
-        lastAccessedLesson: lessonId as string,
-        lastAccessedAt: new Date(),
-      });
+      // await Enrollment.findByIdAndUpdate(enrollment._id, {
+      //   lastAccessedLesson: lessonId as string,
+      //   lastAccessedAt: new Date(),
+      // });
 
       // Serve the playlist file
       const playlistPath = path.join(
@@ -128,7 +130,18 @@ export class VideoController {
         "Access-Control-Allow-Credentials": "true",
       });
 
-      const playlistContent = await fs.readFile(playlistPath, "utf8");
+      let playlistContent = await fs.readFile(playlistPath, "utf8");
+      // Rewrite segment lines to absolute URLs
+      playlistContent = playlistContent
+        .split("\n")
+        .map((line) => {
+          // Only rewrite lines that look like segment files
+          if (/^segment_\d+\.ts$/.test(line.trim())) {
+            return `/storage/videos/${lessonId}/${line.trim()}`;
+          }
+          return line;
+        })
+        .join("\n");
       res.send(playlistContent);
     } catch (error) {
       console.error("Error serving video playlist:", error);
@@ -136,16 +149,19 @@ export class VideoController {
     }
   }
 
-  // Serve video segments with access control
+  // Serve video segments (public)
+  // NOTE: This route is deprecated. Segments should be served directly from /storage/videos/<lessonId>/segment_XXX.ts
+  //       via static file serving, not through this API endpoint.
   static async getVideoSegment(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { lessonId, segmentName } = req.params;
-      const userId = req.user?.id;
+      // const userId = req.user?.id;
 
-      if (!userId) {
-        res.status(401).json({ message: "Authentication required" });
-        return;
-      }
+      // Remove authentication and enrollment check
+      // if (!userId) {
+      //   res.status(401).json({ message: "Authentication required" });
+      //   return;
+      // }
 
       const lesson = await Lesson.findById(lessonId).populate("course");
 
@@ -154,17 +170,16 @@ export class VideoController {
         return;
       }
 
-      // Check access
-      const enrollment = await Enrollment.findOne({
-        student: userId,
-        course: lesson.course,
-        isActive: true,
-      });
-
-      if (!enrollment) {
-        res.status(403).json({ message: "Access denied" });
-        return;
-      }
+      // Remove enrollment check
+      // const enrollment = await Enrollment.findOne({
+      //   student: userId,
+      //   course: lesson.course,
+      //   isActive: true,
+      // });
+      // if (!enrollment) {
+      //   res.status(403).json({ message: "Access denied" });
+      //   return;
+      // }
 
       // Serve the segment file
       const segmentPath = path.join(
@@ -195,7 +210,7 @@ export class VideoController {
     }
   }
 
-  // Get video thumbnail
+  // Get video thumbnail (public)
   static async getVideoThumbnail(
     req: AuthRequest,
     res: Response
@@ -228,19 +243,20 @@ export class VideoController {
     }
   }
 
-  // Generate secure video access token
+  // Generate secure video access token (public)
   static async generateVideoToken(
     req: AuthRequest,
     res: Response
   ): Promise<void> {
     try {
       const { lessonId } = req.params;
-      const userId = req.user?.id;
+      // const userId = req.user?.id;
 
-      if (!userId) {
-        res.status(401).json({ message: "Authentication required" });
-        return;
-      }
+      // Remove authentication and enrollment check
+      // if (!userId) {
+      //   res.status(401).json({ message: "Authentication required" });
+      //   return;
+      // }
 
       const lesson = await Lesson.findById(lessonId).populate("course");
 
@@ -249,34 +265,33 @@ export class VideoController {
         return;
       }
 
-      // Check enrollment
-      const enrollment = await Enrollment.findOne({
-        student: userId,
-        course: lesson.course,
-        isActive: true,
-      });
+      // Remove enrollment check
+      // const enrollment = await Enrollment.findOne({
+      //   student: userId,
+      //   course: lesson.course,
+      //   isActive: true,
+      // });
+      // if (!enrollment) {
+      //   res.status(403).json({ message: "Access denied" });
+      //   return;
+      // }
 
-      if (!enrollment) {
-        res.status(403).json({ message: "Access denied" });
-        return;
-      }
-
-      // Generate time-limited token
-      const token = jwt.sign(
-        {
-          userId,
-          lessonId,
-          courseId: lesson.course,
-          timestamp: Date.now(),
-        },
-        process.env["JWT_SECRET"] || "your-secret-key",
-        { expiresIn: "2h" }
-      );
+      // Generate time-limited token (optional, can skip)
+      // const token = jwt.sign(
+      //   {
+      //     userId,
+      //     lessonId,
+      //     courseId: lesson.course,
+      //     timestamp: Date.now(),
+      //   },
+      //   process.env["JWT_SECRET"] || "your-secret-key",
+      //   { expiresIn: "2h" }
+      // );
 
       res.json({
-        token,
+        // token,
         videoUrl: `/api/video/stream/${lessonId}`,
-        expiresIn: 7200, // 2 hours
+        // expiresIn: 7200, // 2 hours
       });
     } catch (error) {
       console.error("Error generating video token:", error);

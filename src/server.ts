@@ -60,7 +60,7 @@ class Server {
     // CORS configuration
     this.app.use(
       cors({
-        origin: process.env["FRONTEND_URL"] || "http://localhost:3000",
+        origin: "http://localhost:5175", // or whatever your frontend port is
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],

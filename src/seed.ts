@@ -1,14 +1,14 @@
-import mongoose from 'mongoose';
-import User from './models/User';
-import Course from './models/Course';
-import Lesson from './models/Lesson';
-import Enrollment from './models/Enrollment';
+import mongoose from "mongoose";
+import User from "./models/User.ts";
+import Course from "./models/Course.ts";
+import Lesson from "./models/Lesson.ts";
+import Enrollment from "./models/Enrollment.ts";
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/lms';
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/videolms";
 
 async function seed() {
   await mongoose.connect(MONGO_URI);
-  console.log('Connected to MongoDB');
+  console.log("Connected to MongoDB");
 
   // Clear existing data
   await User.deleteMany({});
@@ -18,44 +18,44 @@ async function seed() {
 
   // Create users
   const admin = await User.create({
-    email: 'admin@example.com',
-    name: 'Admin User',
-    password: 'password123',
-    role: 'admin',
+    email: "admin@example.com",
+    name: "Admin User",
+    password: "password123",
+    role: "admin",
     isActive: true,
     emailVerified: true,
   });
   const instructor = await User.create({
-    email: 'instructor@example.com',
-    name: 'Instructor User',
-    password: 'password123',
-    role: 'instructor',
+    email: "instructor@example.com",
+    name: "Instructor User",
+    password: "password123",
+    role: "instructor",
     isActive: true,
     emailVerified: true,
   });
   const student = await User.create({
-    email: 'student@example.com',
-    name: 'Student User',
-    password: 'password123',
-    role: 'student',
+    email: "student@example.com",
+    name: "Student User",
+    password: "password123",
+    role: "student",
     isActive: true,
     emailVerified: true,
   });
 
   // Create a course
   const course = await Course.create({
-    title: 'Sample Course',
-    description: 'A sample course for seeding.',
+    title: "Sample Course",
+    description: "A sample course for seeding.",
     instructor: instructor._id,
-    thumbnail: 'https://via.placeholder.com/300x200',
+    thumbnail: "https://via.placeholder.com/300x200",
     price: 0,
-    currency: 'USD',
+    currency: "USD",
     isPublished: true,
     isFree: true,
-    category: 'General',
-    tags: ['sample', 'test'],
+    category: "General",
+    tags: ["sample", "test"],
     duration: 60,
-    difficulty: 'beginner',
+    difficulty: "beginner",
     lessons: [],
     enrolledStudents: [],
     rating: 0,
@@ -64,17 +64,17 @@ async function seed() {
 
   // Create a lesson (no video, just metadata)
   const lesson = await Lesson.create({
-    title: 'Sample Lesson',
-    description: 'A sample lesson for seeding.',
+    title: "Sample Lesson",
+    description: "A sample lesson for seeding.",
     course: course._id,
     order: 1,
     duration: 300,
-    videoUrl: '',
-    thumbnailUrl: '',
+    videoUrl: "https://example.com/placeholder.m3u8", // Placeholder URL
+    thumbnailUrl: "https://via.placeholder.com/300x200", // Placeholder thumbnail
     isPublished: true,
     isFree: true,
-    encryptionKey: 'seedkeyseedkeyseedkeyseedkey12',
-    keyId: 'seedkeyid',
+    encryptionKey: "seedkeyseedkeyseedkeyseedkey12",
+    keyId: "seedkeyid",
     resources: [],
   });
 
@@ -93,11 +93,11 @@ async function seed() {
     certificateIssued: false,
   });
 
-  console.log('Seed data created!');
+  console.log("Seed data created!");
   await mongoose.disconnect();
 }
 
 seed().catch((err) => {
-  console.error('Seed error:', err);
+  console.error("Seed error:", err);
   process.exit(1);
 });
