@@ -2,7 +2,6 @@ import type { Request, Response, NextFunction } from "express";
 import { auth } from "../config/auth.ts";
 import User from "../models/User.ts";
 import Enrollment from "../models/Enrollment.ts";
-import { Headers } from "node-fetch";
 
 export interface AuthRequest extends Request {
   user?: {
@@ -19,17 +18,8 @@ export const authenticate = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Convert Express headers object to Headers instance
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(req.headers)) {
-      if (Array.isArray(value)) {
-        headers.set(key, value.join(","));
-      } else if (value !== undefined) {
-        headers.set(key, value as string);
-      }
-    }
     const session = await auth.api.getSession({
-      headers,
+      headers: req.headers as any,
     });
 
     // if (!session) {
@@ -52,10 +42,10 @@ export const authenticate = async (
     // };
 
     next();
-  // } catch (error) {
-  //   console.error("Authentication error:", error);
-  //   res.status(500).json({ message: "Authentication failed" });
-  // }
+  } catch (error) {
+    console.error("Authentication error:", error);
+    res.status(500).json({ message: "Authentication failed" });
+  }
 };
 
 export const authorize = (roles: string[]) => {
@@ -65,7 +55,7 @@ export const authorize = (roles: string[]) => {
     //   return;
     // }
 
-    if (!roles.includes(req.user.role)) {
+    if (!req.user || !roles.includes(req.user.role)) {
       res.status(403).json({ message: "Insufficient permissions" });
       return;
     }

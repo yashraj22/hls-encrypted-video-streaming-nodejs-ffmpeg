@@ -24,6 +24,9 @@ router.post(
 // Get lesson details
 router.get("/:lessonId", LessonController.getLesson);
 
+// Get lesson video information
+router.get("/:lessonId/video", LessonController.getLesson);
+
 // Update lesson (instructors only)
 router.put(
   "/:lessonId",

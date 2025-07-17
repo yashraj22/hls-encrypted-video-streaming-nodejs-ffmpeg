@@ -4,7 +4,8 @@ import Course from "./models/Course.ts";
 import Lesson from "./models/Lesson.ts";
 import Enrollment from "./models/Enrollment.ts";
 
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/videolms";
+const MONGO_URI =
+  process.env["MONGO_URI"] || "mongodb://localhost:27017/videolms";
 
 async function seed() {
   await mongoose.connect(MONGO_URI);
@@ -73,13 +74,13 @@ async function seed() {
     thumbnailUrl: "https://via.placeholder.com/300x200", // Placeholder thumbnail
     isPublished: true,
     isFree: true,
-    encryptionKey: "seedkeyseedkeyseedkeyseedkey12",
+    encryptionKey: "bf13642711a34333986ad8bb5cc86159", // Valid 32-char hex string
     keyId: "seedkeyid",
     resources: [],
   });
 
   // Update course with lesson
-  course.lessons.push(lesson._id);
+  course.lessons.push(lesson._id as mongoose.Types.ObjectId);
   await course.save();
 
   // Enroll student
@@ -95,6 +96,24 @@ async function seed() {
 
   console.log("Seed data created!");
   await mongoose.disconnect();
+}
+
+if (process.argv.includes("--show-lesson")) {
+  const idx = process.argv.indexOf("--show-lesson");
+  const lessonId = process.argv[idx + 1];
+  if (!lessonId) {
+    console.error("Usage: ts-node src/seed.ts --show-lesson <lessonId>");
+    process.exit(1);
+  }
+  import("./models/Lesson.ts").then(async ({ default: Lesson }) => {
+    const lesson = await Lesson.findById(lessonId);
+    if (!lesson) {
+      console.log("Lesson not found");
+    } else {
+      console.log("Lesson:", JSON.stringify(lesson, null, 2));
+    }
+    process.exit(0);
+  });
 }
 
 seed().catch((err) => {

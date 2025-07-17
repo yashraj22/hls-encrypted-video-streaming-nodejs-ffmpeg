@@ -15,53 +15,36 @@ export class VideoController {
   ): Promise<void> {
     try {
       const { keyId } = req.params;
-      // const userId = req.user?.id;
-
-      // Remove authentication and enrollment check
-      // if (!userId) {
-      //   res.status(401).json({ message: "Authentication required" });
-      //   return;
-      // }
-
-      // Find the lesson associated with this key
-      const lesson = await Lesson.findOne({ keyId });
-
-      if (!lesson) {
-        res.status(404).json({ message: "Video not found" });
+      
+      if (!keyId) {
+        res.status(400).json({ message: "Key ID is required" });
         return;
       }
 
-      // Remove enrollment check
-      // const enrollment = await Enrollment.findOne({
-      //   student: userId,
-      //   course: lesson.course,
-      //   isActive: true,
-      // });
-      // if (!enrollment) {
-      //   res.status(403).json({ message: "Access denied" });
-      //   return;
-      // }
+      // Get the key file path from VideoProcessingService
+      const keyPath = await VideoProcessingService.getKeyPath(keyId);
+      
+      // Check if key file exists
+      if (!(await fs.pathExists(keyPath))) {
+        res.status(404).json({ message: "Encryption key not found" });
+        return;
+      }
 
-      // Generate time-limited access token (optional, can skip)
-      // const accessToken = jwt.sign(
-      //   { userId, lessonId: lesson._id, keyId },
-      //   process.env["JWT_SECRET"] || "your-secret-key",
-      //   { expiresIn: "1h" }
-      // );
-
-      // Set security headers
+      // Set security headers appropriate for key serving
       res.set({
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        Pragma: "no-cache",
-        Expires: "0",
+        "Cache-Control": "private, max-age=3600", // Allow caching for better performance
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
         "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Access-Control-Allow-Origin": req.headers.origin || "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Cache-Control, Pragma",
       });
 
-      // Return the encryption key
+      // Return the encryption key as binary data
       res.type("application/octet-stream");
-      res.send(Buffer.from(lesson.encryptionKey, "hex"));
+      const keyBuffer = await fs.readFile(keyPath);
+      res.send(keyBuffer);
     } catch (error) {
       console.error("Error serving encryption key:", error);
       res.status(500).json({ message: "Internal server error" });

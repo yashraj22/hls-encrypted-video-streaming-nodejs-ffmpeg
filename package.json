@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "start": "node dist/server.js",
-    "dev": "ts-node-esm --experimental-specifier-resolution=node src/server.ts",
+    "dev": "nodemon --ignore 'storage/' --ignore 'temp-uploads' src/server.ts",
     "build": "tsc",
     "clean": "rm -rf dist",
     "seed": "ts-node-esm src/seed.ts"
@@ -51,6 +51,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/node-fetch": "^2.6.12",
     "@types/uuid": "^9.0.7",
+    "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }

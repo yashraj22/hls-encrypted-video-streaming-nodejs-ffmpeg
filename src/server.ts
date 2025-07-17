@@ -60,10 +60,28 @@ class Server {
     // CORS configuration
     this.app.use(
       cors({
-        origin: "http://localhost:5175", // or whatever your frontend port is
+        origin: [
+          "http://localhost:5173", // Frontend development server
+          "http://localhost:5174", // Frontend development server (alternative port)
+          "http://localhost:3000", // Backend server (for HLS.js key requests)
+        ],
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+        allowedHeaders: [
+          "Content-Type", 
+          "Authorization", 
+          "X-Requested-With", 
+          "Cache-Control", 
+          "Pragma",
+          "Accept",
+          "Origin",
+          "X-Requested-With",
+          "Access-Control-Request-Method",
+          "Access-Control-Request-Headers"
+        ],
+        exposedHeaders: ["Content-Length", "X-Content-Type-Options"],
+        optionsSuccessStatus: 200, // Support legacy browsers
+        preflightContinue: false,
       })
     );
 
@@ -73,6 +91,15 @@ class Server {
       max: 100, // limit each IP to 100 requests per windowMs
       message: "Too many requests from this IP, please try again later.",
     });
+    
+    // More permissive rate limiting for video endpoints
+    const videoLimiter = rateLimit({
+      windowMs: 5 * 60 * 1000, // 5 minutes
+      max: 500, // Allow more requests for video streaming
+      message: "Too many video requests from this IP, please try again later.",
+    });
+    
+    this.app.use("/api/video", videoLimiter);
     this.app.use("/api/", limiter);
 
     // Body parsing middleware
@@ -83,7 +110,7 @@ class Server {
     this.app.use(
       "/storage",
       express.static(path.join(__dirname, "../storage"), {
-        setHeaders: (res, path) => {
+        setHeaders: (res, filePath) => {
           // Set security headers for video files
           res.set({
             "Cache-Control": "private, max-age=3600",
@@ -91,6 +118,13 @@ class Server {
             "X-Frame-Options": "DENY",
             "Referrer-Policy": "strict-origin-when-cross-origin",
           });
+          
+          // Set correct MIME type for HLS segments
+          if (filePath.endsWith('.ts')) {
+            res.set('Content-Type', 'video/mp2t');
+          } else if (filePath.endsWith('.m3u8')) {
+            res.set('Content-Type', 'application/vnd.apple.mpegurl');
+          }
         },
       })
     );
@@ -100,13 +134,49 @@ class Server {
 
     // Custom security headers for video content
     this.app.use("/api/video", (req, res, next) => {
+      // More permissive headers for key endpoint
+      if (req.path.startsWith('/key/')) {
+        res.set({
+          "X-Content-Type-Options": "nosniff",
+          "X-Frame-Options": "DENY",
+          "Cache-Control": "private, max-age=3600", // Allow caching for keys
+          "Access-Control-Allow-Origin": req.headers.origin || "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Cache-Control, Pragma",
+        });
+      } else {
+        res.set({
+          "X-Content-Type-Options": "nosniff",
+          "X-Frame-Options": "DENY",
+          "Cache-Control": "private, no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        });
+      }
+      next();
+    });
+
+    // Custom CORS headers for lessons route (especially for file uploads)
+    this.app.use("/api/lessons", (req, res, next) => {
+      // Handle preflight requests
+      if (req.method === 'OPTIONS') {
+        res.set({
+          "Access-Control-Allow-Origin": req.headers.origin || "*",
+          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Cache-Control, Pragma, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers",
+          "Access-Control-Allow-Credentials": "true",
+          "Access-Control-Max-Age": "86400", // 24 hours
+        });
+        res.status(200).end();
+        return;
+      }
+      
+      // Set headers for actual requests
       res.set({
-        "X-Content-Type-Options": "nosniff",
-        "X-Frame-Options": "DENY",
-        "Cache-Control": "private, no-cache, no-store, must-revalidate",
-        Pragma: "no-cache",
-        Expires: "0",
+        "Access-Control-Allow-Origin": req.headers.origin || "*",
+        "Access-Control-Allow-Credentials": "true",
       });
+      
       next();
     });
   }

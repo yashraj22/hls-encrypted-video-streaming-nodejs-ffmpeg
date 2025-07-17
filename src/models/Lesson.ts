@@ -95,7 +95,6 @@ const lessonSchema = new Schema<ILesson>({
 
 // Indexes for efficient queries
 lessonSchema.index({ course: 1, order: 1 });
-lessonSchema.index({ keyId: 1 });
 lessonSchema.index({ isPublished: 1 });
 
 export default mongoose.model<ILesson>('Lesson', lessonSchema);

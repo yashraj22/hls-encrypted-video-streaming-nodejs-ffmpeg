@@ -58,7 +58,7 @@ export class VideoProcessingService {
 
     // Create key info file for HLS encryption
     const keyInfoPath = path.join(outputDir, "key.info");
-    const keyUri = `/api/video/key/${keyId}`;
+    const keyUri = `http://localhost:3000/api/video/key/${keyId}`;
     // Write key info file: only two lines, no key bytes appended
     await fs.writeFile(keyInfoPath, `${keyUri}\n${keyFilePath}\n`, "utf8");
     // Debug logging
@@ -82,7 +82,8 @@ export class VideoProcessingService {
 
       // Clean up temporary files
       await fs.remove(filePath);
-      await fs.remove(keyInfoPath);
+      // Do NOT remove keyInfoPath for debugging
+      // await fs.remove(keyInfoPath);
 
       return {
         videoUrl: `/storage/videos/${lessonId}/index.m3u8`,
@@ -139,26 +140,77 @@ export class VideoProcessingService {
     return new Promise((resolve, reject) => {
       ffmpeg(filePath)
         .outputOptions([
-          // Video encoding settings
+          // Video encoding settings - ensure compatibility
           "-c:v libx264",
           "-c:a aac",
-          "-preset medium",
+          "-preset veryfast",
           "-crf 23",
           "-profile:v baseline",
           "-level 3.0",
+          "-pix_fmt yuv420p",
+          // Audio settings - ensure proper audio stream
+          "-ar 44100",
+          "-ac 2",
+          "-b:a 128k",
+          "-acodec aac",
+          // Ensure proper stream mapping
+          "-map 0:v:0",
+          "-map 0:a:0",
+          // Force keyframe intervals for better segmentation
+          "-g 30",
+          "-keyint_min 30",
+          "-sc_threshold 0",
           // HLS settings
           "-f hls",
           "-hls_time 6",
           "-hls_list_size 0",
           "-hls_playlist_type vod",
-          // Encryption settings (DISABLED FOR DEBUGGING)
-          // `-hls_key_info_file ${keyInfoPath}`,
+          "-hls_segment_type mpegts",
+          "-hls_flags independent_segments",
+          // Ensure proper MPEG-TS format
+          "-mpegts_m2ts_mode 1",
+          "-mpegts_copyts 1",
+          "-mpegts_start_pid 0x100",
+          // Force proper stream types in MPEG-TS
+          "-streamid 0:0x100",
+          "-streamid 1:0x101",
+          // Encryption settings
+          `-hls_key_info_file`,
+          keyInfoPath,
           "-hls_segment_filename",
           `${outputDir}/segment_%03d.ts`,
+          // Start numbering from 0
+          "-start_number 0",
+          // Ensure proper format
+          "-avoid_negative_ts make_zero",
+          "-fflags +genpts",
         ])
         .output(`${outputDir}/index.m3u8`)
-        .on("end", () => {
-          console.log("HLS generation completed with encryption");
+        .on("end", async () => {
+          console.log("HLS generation completed with encryption enabled");
+          // Debug: print key.info and key file contents after FFmpeg
+          try {
+            const keyInfoContent = await fs.readFile(keyInfoPath, "utf8");
+            console.log("[DEBUG] key.info after FFmpeg:", keyInfoContent);
+            const keyFilePathLine = keyInfoContent.split("\n")[1];
+            if (keyFilePathLine) {
+              const keyFilePath = keyFilePathLine.trim();
+              const keyFileContent = await fs.readFile(keyFilePath);
+              console.log(
+                "[DEBUG] key file after FFmpeg (hex):",
+                keyFileContent.toString("hex")
+              );
+            } else {
+              console.warn(
+                "[DEBUG] key.info does not have a second line for key file path."
+              );
+            }
+          } catch (e) {
+            console.error(
+              "[DEBUG] Error reading key.info or key file after FFmpeg:",
+              e
+            );
+          }
           resolve();
         })
         .on("error", (err) => {

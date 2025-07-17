@@ -3,7 +3,7 @@ import { Box, Button, LinearProgress, Typography } from "@mui/material";
 import axios from "axios";
 
 // Use the correct lesson _id from the backend
-const LESSON_ID = "68775ee4f8422246a682efb6";
+const LESSON_ID = "6877bc07e4e52f7c19d4a7ba";
 const BACKEND_URL = "http://localhost:3000";
 
 const VideoUpload: React.FC = () => {
