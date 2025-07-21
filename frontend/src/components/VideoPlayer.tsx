@@ -1,5 +1,15 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Box, Typography } from "@mui/material";
+import {
+  Box,
+  Typography,
+  FormControl,
+  Select,
+  MenuItem,
+  InputLabel,
+  SelectChangeEvent,
+  Chip,
+  Stack,
+} from "@mui/material";
 import Hls from "hls.js";
 
 // Use the correct lesson _id from the backend
@@ -10,6 +20,23 @@ const VideoPlayer: React.FC = () => {
   const hlsRef = useRef<Hls | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [qualityLevels, setQualityLevels] = useState<
+    { level: number; height: number; bitrate: number }[]
+  >([]);
+  const [selectedQuality, setSelectedQuality] = useState<number>(-1); // -1 for auto
+  const [currentQuality, setCurrentQuality] = useState<string>("Auto");
+
+  const handleQualityChange = useCallback(
+    (event: SelectChangeEvent<number>) => {
+      const selectedLevel = event.target.value as number;
+      setSelectedQuality(selectedLevel);
+
+      if (hlsRef.current) {
+        hlsRef.current.currentLevel = selectedLevel;
+      }
+    },
+    []
+  );
 
   const cleanup = useCallback(() => {
     if (hlsRef.current) {
@@ -23,13 +50,17 @@ const VideoPlayer: React.FC = () => {
     if (!video) return;
 
     const playlistUrl = `/api/video/stream/${LESSON_ID}`;
-    
+
     const onVideoError = (e: Event) => {
       const target = e.target as HTMLVideoElement;
       const errorObj = target.error;
       if (errorObj) {
         console.error("Video element error:", errorObj);
-        setError(`Video element error: code ${errorObj.code} - ${errorObj.message || "No message"}`);
+        setError(
+          `Video element error: code ${errorObj.code} - ${
+            errorObj.message || "No message"
+          }`
+        );
       } else {
         console.error("Unknown video element error", e);
         setError("Unknown video element error");
@@ -42,7 +73,7 @@ const VideoPlayer: React.FC = () => {
     if (Hls.isSupported()) {
       // Clean up any existing HLS instance
       cleanup();
-      
+
       hlsRef.current = new Hls({
         debug: true,
         enableWorker: true,
@@ -89,19 +120,19 @@ const VideoPlayer: React.FC = () => {
         levelLoadingMaxRetry: 2,
         levelLoadingMaxRetryTimeout: 10000,
         levelLoadingRetryDelay: 1000,
-        xhrSetup: function(xhr, url) {
-          console.log('XHR request to:', url);
-          xhr.setRequestHeader('Cache-Control', 'no-cache');
-          xhr.setRequestHeader('Pragma', 'no-cache');
+        xhrSetup: function (xhr, url) {
+          console.log("XHR request to:", url);
+          xhr.setRequestHeader("Cache-Control", "no-cache");
+          xhr.setRequestHeader("Pragma", "no-cache");
         },
       });
-      
+
       const hls = hlsRef.current;
-      
+
       // Set up error handling
       hls.on(Hls.Events.ERROR, (event: string, data: any) => {
         console.error("Hls.js ERROR event:", { event, ...data });
-        
+
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
@@ -121,59 +152,90 @@ const VideoPlayer: React.FC = () => {
         } else {
           // For non-fatal errors, log them but don't show to user
           console.log(`Non-fatal HLS error: ${data.type} - ${data.details}`);
-          
+
           // Special handling for key loading errors
-          if (data.details === 'keyLoadError') {
-            console.error('Key loading error:', data);
-            setError('Failed to load encryption key. Please check server configuration.');
+          if (data.details === "keyLoadError") {
+            console.error("Key loading error:", data);
+            setError(
+              "Failed to load encryption key. Please check server configuration."
+            );
             setIsLoading(false);
             return;
           }
-          
+
           // Special handling for fragment parsing errors
-          if (data.details === 'fragParsingError') {
-            console.log(`Fragment parsing error for: ${data.frag?.url || 'unknown fragment'}`);
+          if (data.details === "fragParsingError") {
+            console.log(
+              `Fragment parsing error for: ${
+                data.frag?.url || "unknown fragment"
+              }`
+            );
             if (data.frag) {
               console.log(`Fragment details:`, {
                 url: data.frag.url,
                 sn: data.frag.sn,
                 level: data.frag.level,
                 start: data.frag.start,
-                duration: data.frag.duration
+                duration: data.frag.duration,
               });
             }
           }
-          
+
           // If too many fragment load errors, stop retrying
-          if (data.details === 'fragLoadError' && data.frag?.loadCounter > 3) {
-            console.error('Too many fragment load errors, stopping playback');
-            setError('Failed to load video segments. Please try again.');
+          if (data.details === "fragLoadError" && data.frag?.loadCounter > 3) {
+            console.error("Too many fragment load errors, stopping playback");
+            setError("Failed to load video segments. Please try again.");
             setIsLoading(false);
             hls.destroy();
           }
         }
       });
-      
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log("Manifest parsed successfully");
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (event: string, data: any) => {
+        console.log("Manifest parsed successfully", data);
+
+        // Set up quality levels
+        const levels = hls.levels.map((level, index) => ({
+          level: index,
+          height: level.height,
+          bitrate: level.bitrate,
+        }));
+
+        setQualityLevels(levels);
         setIsLoading(false);
+
+        // Set initial quality to auto
+        hls.currentLevel = -1;
+        setSelectedQuality(-1);
       });
-      
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, (event: string, data: any) => {
+        console.log("Level switched to:", data.level);
+        const level = hls.levels[data.level];
+        if (level) {
+          const quality = level.height
+            ? `${level.height}p`
+            : `${Math.round(level.bitrate / 1000)}kbps`;
+          setCurrentQuality(
+            selectedQuality === -1 ? `Auto (${quality})` : quality
+          );
+        }
+      });
+
       hls.on(Hls.Events.LEVEL_LOADED, (event: string, data: any) => {
         console.log("Level loaded:", data);
       });
-      
+
       hls.on(Hls.Events.FRAG_LOADED, (event: string, data: any) => {
         console.log("Fragment loaded:", data.frag.url);
       });
-      
+
       hls.on(Hls.Events.FRAG_PARSED, (event: string, data: any) => {
         console.log("Fragment parsed successfully:", data.frag.url);
       });
-      
+
       hls.loadSource(playlistUrl);
       hls.attachMedia(video);
-      
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = playlistUrl;
       setIsLoading(false);
@@ -193,13 +255,41 @@ const VideoPlayer: React.FC = () => {
       <Typography variant="h5" gutterBottom>
         Play Video (Student)
       </Typography>
+
+      <Stack direction="row" spacing={2} alignItems="center" mb={2}>
+        <Chip
+          label={`Current: ${currentQuality}`}
+          color="primary"
+          variant="outlined"
+        />
+
+        {qualityLevels.length > 0 && (
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>Quality</InputLabel>
+            <Select
+              value={selectedQuality}
+              label="Quality"
+              onChange={handleQualityChange}
+            >
+              <MenuItem value={-1}>Auto</MenuItem>
+              {qualityLevels.map((level) => (
+                <MenuItem key={level.level} value={level.level}>
+                  {level.height}p ({Math.round(level.bitrate / 1000)}kbps)
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+      </Stack>
+
       {isLoading && <Typography>Loading video...</Typography>}
       {error && <Typography color="error">{error}</Typography>}
-      <video 
-        ref={videoRef} 
-        controls 
-        width="100%" 
-        style={{ maxWidth: 600 }} 
+
+      <video
+        ref={videoRef}
+        controls
+        width="100%"
+        style={{ maxWidth: 800 }}
         preload="metadata"
       />
     </Box>

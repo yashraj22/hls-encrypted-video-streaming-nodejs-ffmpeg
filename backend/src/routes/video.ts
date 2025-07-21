@@ -7,18 +7,18 @@ const router = Router();
 // All video routes are now public
 // router.use(authenticate);
 
-// Route guard: prevent /api/video/stream/:lessonId/* from matching segment requests
-router.get("/stream/:lessonId/*", (req, res) => {
-  res.status(404).json({ message: "Not found" });
-});
-
 // Get encryption key for video decryption
 router.get("/key/:keyId", VideoController.getEncryptionKey);
 
-// Get video playlist (m3u8)
+// Get quality-specific video playlist (m3u8) - this must come before the master playlist route
+router.get(
+  "/stream/:lessonId([a-fA-F0-9]{24})/:quality(480p|720p|1080p)/index.m3u8",
+  VideoController.getVideoPlaylist
+);
+
+// Get video playlist (m3u8) - master playlist
 router.get(
   "/stream/:lessonId([a-fA-F0-9]{24})",
-  // checkLessonAccess,
   VideoController.getVideoPlaylist
 );
 

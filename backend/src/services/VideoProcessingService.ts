@@ -15,17 +15,51 @@ if (ffmpegPath) {
 }
 ffmpeg.setFfprobePath(ffprobePath);
 
+export interface QualityLevel {
+  quality: string;
+  resolution: string;
+  bitrate: string;
+  videoBitrate: string;
+  audioBitrate: string;
+}
+
 export interface ProcessingResult {
   videoUrl: string;
   thumbnailUrl: string;
   duration: number;
   keyId: string;
   encryptionKey: string;
+  qualityLevels: QualityLevel[];
 }
 
 export class VideoProcessingService {
   private static readonly STORAGE_PATH = path.join(__dirname, "../../storage");
   private static readonly KEYS_PATH = path.join(__dirname, "../../keys");
+
+  // Quality levels configuration
+  private static readonly QUALITY_LEVELS: QualityLevel[] = [
+    {
+      quality: "1080p",
+      resolution: "1920x1080",
+      bitrate: "3000k",
+      videoBitrate: "2500k",
+      audioBitrate: "128k",
+    },
+    {
+      quality: "720p",
+      resolution: "1280x720",
+      bitrate: "1500k",
+      videoBitrate: "1300k",
+      audioBitrate: "128k",
+    },
+    {
+      quality: "480p",
+      resolution: "854x480",
+      bitrate: "800k",
+      videoBitrate: "700k",
+      audioBitrate: "128k",
+    },
+  ];
 
   static async initialize(): Promise<void> {
     await fs.ensureDir(this.STORAGE_PATH);
@@ -56,41 +90,55 @@ export class VideoProcessingService {
     const { key, keyId } = this.generateEncryptionKey();
     const keyFilePath = await this.saveEncryptionKey(keyId, key);
 
-    // Create key info file for HLS encryption
-    const keyInfoPath = path.join(outputDir, "key.info");
-    const keyUri = `http://localhost:3000/api/video/key/${keyId}`;
-    // Write key info file: only two lines, no key bytes appended
-    await fs.writeFile(keyInfoPath, `${keyUri}\n${keyFilePath}\n`, "utf8");
-    // Debug logging
-    console.log("Key info file written:", keyInfoPath);
-    console.log("Key URI:", keyUri);
-    console.log("Key file path:", keyFilePath);
-    console.log("Key (hex):", key.toString("hex"));
-    const keyInfoDebug = await fs.readFile(keyInfoPath);
-    console.log("Key info file (hex):", keyInfoDebug.toString("hex"));
-    console.log("Key info file (utf8):", keyInfoDebug.toString("utf8"));
-
     try {
+      // Get video info to determine available quality levels
+      const videoInfo = await this.getVideoInfo(filePath);
+      const availableQualities = this.getAvailableQualityLevels(videoInfo);
+
+      // Create master playlist
+      const masterPlaylistPath = path.join(outputDir, "master.m3u8");
+      await this.createMasterPlaylist(
+        masterPlaylistPath,
+        availableQualities,
+        lessonId
+      );
+
       // Get video duration
       const duration = await this.getVideoDuration(filePath);
 
       // Generate thumbnail
       await this.generateThumbnail(filePath, outputDir, title);
 
-      // Process video with encryption
-      await this.generateEncryptedHLS(filePath, outputDir, keyInfoPath);
+      // Process video for each quality level
+      for (const quality of availableQualities) {
+        const qualityDir = path.join(outputDir, quality.quality);
+        await fs.ensureDir(qualityDir);
+
+        // Create key info file for this quality
+        const keyInfoPath = path.join(qualityDir, "key.info");
+        const keyUri = `http://localhost:3000/api/video/key/${keyId}`;
+        await fs.writeFile(keyInfoPath, `${keyUri}\n${keyFilePath}\n`, "utf8");
+
+        // Generate encrypted HLS for this quality
+        await this.generateEncryptedHLSForQuality(
+          filePath,
+          qualityDir,
+          keyInfoPath,
+          quality,
+          quality.quality
+        );
+      }
 
       // Clean up temporary files
       await fs.remove(filePath);
-      // Do NOT remove keyInfoPath for debugging
-      // await fs.remove(keyInfoPath);
 
       return {
-        videoUrl: `/storage/videos/${lessonId}/index.m3u8`,
+        videoUrl: `/storage/videos/${lessonId}/master.m3u8`,
         thumbnailUrl: `/storage/videos/${lessonId}/thumbnail.webp`,
         duration,
         keyId,
         encryptionKey: key.toString("hex"),
+        qualityLevels: availableQualities,
       };
     } catch (error) {
       // Clean up on error
@@ -106,6 +154,59 @@ export class VideoProcessingService {
         else resolve(metadata.format.duration || 0);
       });
     });
+  }
+
+  private static async getVideoInfo(filePath: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(filePath, (err, metadata) => {
+        if (err) reject(err);
+        else resolve(metadata);
+      });
+    });
+  }
+
+  private static getAvailableQualityLevels(videoInfo: any): QualityLevel[] {
+    const videoStream = videoInfo.streams.find(
+      (stream: any) => stream.codec_type === "video"
+    );
+    if (!videoStream) {
+      throw new Error("No video stream found");
+    }
+
+    const inputHeight = videoStream.height || 0;
+    const inputWidth = videoStream.width || 0;
+
+    // Filter quality levels based on input resolution
+    return this.QUALITY_LEVELS.filter((quality) => {
+      const dimensions = quality.resolution.split("x").map(Number);
+      if (dimensions.length !== 2 || !dimensions[0] || !dimensions[1])
+        return false;
+
+      const targetWidth = dimensions[0];
+      const targetHeight = dimensions[1];
+
+      // Only include qualities that are equal to or smaller than the input
+      return targetHeight <= inputHeight && targetWidth <= inputWidth;
+    });
+  }
+
+  private static async createMasterPlaylist(
+    masterPlaylistPath: string,
+    qualityLevels: QualityLevel[],
+    lessonId: string
+  ): Promise<void> {
+    let masterPlaylist = "#EXTM3U\n#EXT-X-VERSION:3\n\n";
+
+    for (const quality of qualityLevels) {
+      const [width, height] = quality.resolution.split("x").map(Number);
+      masterPlaylist += `#EXT-X-STREAM-INF:BANDWIDTH=${quality.bitrate.replace(
+        "k",
+        "000"
+      )},RESOLUTION=${width}x${height}\n`;
+      masterPlaylist += `/api/video/stream/${lessonId}/${quality.quality}/index.m3u8\n\n`;
+    }
+
+    await fs.writeFile(masterPlaylistPath, masterPlaylist, "utf8");
   }
 
   private static async generateThumbnail(
@@ -132,15 +233,19 @@ export class VideoProcessingService {
     });
   }
 
-  private static async generateEncryptedHLS(
+  private static async generateEncryptedHLSForQuality(
     filePath: string,
     outputDir: string,
-    keyInfoPath: string
+    keyInfoPath: string,
+    quality: QualityLevel,
+    qualityName: string
   ): Promise<void> {
     return new Promise((resolve, reject) => {
+      const [width, height] = quality.resolution.split("x").map(Number);
+
       ffmpeg(filePath)
         .outputOptions([
-          // Video encoding settings - ensure compatibility
+          // Video encoding settings
           "-c:v libx264",
           "-c:a aac",
           "-preset veryfast",
@@ -148,15 +253,21 @@ export class VideoProcessingService {
           "-profile:v baseline",
           "-level 3.0",
           "-pix_fmt yuv420p",
-          // Audio settings - ensure proper audio stream
+          // Scale to target resolution
+          `-vf scale=${width}:${height}`,
+          // Bitrate settings
+          `-b:v ${quality.videoBitrate}`,
+          `-maxrate ${quality.videoBitrate}`,
+          `-bufsize ${parseInt(quality.videoBitrate) * 2}k`,
+          // Audio settings
           "-ar 44100",
           "-ac 2",
-          "-b:a 128k",
+          `-b:a ${quality.audioBitrate}`,
           "-acodec aac",
-          // Ensure proper stream mapping
+          // Stream mapping
           "-map 0:v:0",
           "-map 0:a:0",
-          // Force keyframe intervals for better segmentation
+          // Force keyframe intervals
           "-g 30",
           "-keyint_min 30",
           "-sc_threshold 0",
@@ -167,11 +278,10 @@ export class VideoProcessingService {
           "-hls_playlist_type vod",
           "-hls_segment_type mpegts",
           "-hls_flags independent_segments",
-          // Ensure proper MPEG-TS format
+          // MPEG-TS settings
           "-mpegts_m2ts_mode 1",
           "-mpegts_copyts 1",
           "-mpegts_start_pid 0x100",
-          // Force proper stream types in MPEG-TS
           "-streamid 0:0x100",
           "-streamid 1:0x101",
           // Encryption settings
@@ -179,49 +289,23 @@ export class VideoProcessingService {
           keyInfoPath,
           "-hls_segment_filename",
           `${outputDir}/segment_%03d.ts`,
-          // Start numbering from 0
           "-start_number 0",
-          // Ensure proper format
           "-avoid_negative_ts make_zero",
           "-fflags +genpts",
         ])
         .output(`${outputDir}/index.m3u8`)
-        .on("end", async () => {
-          console.log("HLS generation completed with encryption enabled");
-          // Debug: print key.info and key file contents after FFmpeg
-          try {
-            const keyInfoContent = await fs.readFile(keyInfoPath, "utf8");
-            console.log("[DEBUG] key.info after FFmpeg:", keyInfoContent);
-            const keyFilePathLine = keyInfoContent.split("\n")[1];
-            if (keyFilePathLine) {
-              const keyFilePath = keyFilePathLine.trim();
-              const keyFileContent = await fs.readFile(keyFilePath);
-              console.log(
-                "[DEBUG] key file after FFmpeg (hex):",
-                keyFileContent.toString("hex")
-              );
-            } else {
-              console.warn(
-                "[DEBUG] key.info does not have a second line for key file path."
-              );
-            }
-          } catch (e) {
-            console.error(
-              "[DEBUG] Error reading key.info or key file after FFmpeg:",
-              e
-            );
-          }
+        .on("end", () => {
+          console.log(`HLS generation completed for ${qualityName} quality`);
           resolve();
         })
         .on("error", (err) => {
-          console.error("FFmpeg error:", err);
+          console.error(`FFmpeg error for ${qualityName}:`, err);
           reject(err);
         })
         .on("progress", (progress) => {
-          console.log(`Processing: ${Math.round(progress.percent || 0)}%`);
-        })
-        .on("stderr", (line) => {
-          console.error("FFmpeg stderr:", line);
+          console.log(
+            `Processing ${qualityName}: ${Math.round(progress.percent || 0)}%`
+          );
         })
         .run();
     });

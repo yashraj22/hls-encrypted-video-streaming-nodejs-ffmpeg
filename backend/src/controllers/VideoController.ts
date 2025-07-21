@@ -15,7 +15,7 @@ export class VideoController {
   ): Promise<void> {
     try {
       const { keyId } = req.params;
-      
+
       if (!keyId) {
         res.status(400).json({ message: "Key ID is required" });
         return;
@@ -23,7 +23,7 @@ export class VideoController {
 
       // Get the key file path from VideoProcessingService
       const keyPath = await VideoProcessingService.getKeyPath(keyId);
-      
+
       // Check if key file exists
       if (!(await fs.pathExists(keyPath))) {
         res.status(404).json({ message: "Encryption key not found" });
@@ -38,7 +38,8 @@ export class VideoController {
         "Referrer-Policy": "strict-origin-when-cross-origin",
         "Access-Control-Allow-Origin": req.headers.origin || "*",
         "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Cache-Control, Pragma",
+        "Access-Control-Allow-Headers":
+          "Content-Type, Authorization, X-Requested-With, Cache-Control, Pragma",
       });
 
       // Return the encryption key as binary data
@@ -52,21 +53,14 @@ export class VideoController {
   }
 
   // Serve video playlist (public)
-  // NOTE: The playlist should reference segment URLs under /storage/videos/<lessonId>/segment_XXX.ts
-  //       so that the HLS player fetches segments directly from static files, not via API routes.
+  // NOTE: This now serves master playlists and quality-specific playlists
   static async getVideoPlaylist(
     req: AuthRequest,
     res: Response
   ): Promise<void> {
     try {
-      const { lessonId } = req.params;
-      // const userId = req.user?.id;
-
-      // Remove authentication and enrollment check
-      // if (!userId) {
-      //   res.status(401).json({ message: "Authentication required" });
-      //   return;
-      // }
+      const { lessonId, quality } = req.params;
+      const playlistName = quality ? `${quality}/index.m3u8` : "master.m3u8";
 
       const lesson = await Lesson.findById(lessonId).populate("course");
 
@@ -75,29 +69,12 @@ export class VideoController {
         return;
       }
 
-      // Remove enrollment check
-      // const enrollment = await Enrollment.findOne({
-      //   student: userId,
-      //   course: lesson.course,
-      //   isActive: true,
-      // });
-      // if (!enrollment) {
-      //   res.status(403).json({ message: "Access denied" });
-      //   return;
-      // }
-
-      // Update last accessed
-      // await Enrollment.findByIdAndUpdate(enrollment._id, {
-      //   lastAccessedLesson: lessonId as string,
-      //   lastAccessedAt: new Date(),
-      // });
-
       // Serve the playlist file
       const playlistPath = path.join(
         VideoProcessingService["STORAGE_PATH"],
         "videos",
         lessonId as string,
-        "index.m3u8"
+        playlistName
       );
 
       if (!(await fs.pathExists(playlistPath))) {
@@ -114,17 +91,20 @@ export class VideoController {
       });
 
       let playlistContent = await fs.readFile(playlistPath, "utf8");
-      // Rewrite segment lines to absolute URLs
-      playlistContent = playlistContent
-        .split("\n")
-        .map((line) => {
-          // Only rewrite lines that look like segment files
-          if (/^segment_\d+\.ts$/.test(line.trim())) {
-            return `/storage/videos/${lessonId}/${line.trim()}`;
-          }
-          return line;
-        })
-        .join("\n");
+
+      // For quality-specific playlists, rewrite segment URLs
+      if (quality) {
+        playlistContent = playlistContent
+          .split("\n")
+          .map((line) => {
+            if (/^segment_\d+\.ts$/.test(line.trim())) {
+              return `/storage/videos/${lessonId}/${quality}/${line.trim()}`;
+            }
+            return line;
+          })
+          .join("\n");
+      }
+
       res.send(playlistContent);
     } catch (error) {
       console.error("Error serving video playlist:", error);
@@ -274,6 +254,7 @@ export class VideoController {
       res.json({
         // token,
         videoUrl: `/api/video/stream/${lessonId}`,
+        masterPlaylistUrl: `/api/video/stream/${lessonId}`,
         // expiresIn: 7200, // 2 hours
       });
     } catch (error) {
